@@ -168,7 +168,7 @@ def save_data():
 
     except Exception as e:
         logger.error(f"Save error: {e}")
-```
+
 
 def load_data():
     global user_ids, user_data
@@ -185,7 +185,7 @@ def load_data():
 
     except Exception as e:
         logger.error(f"Load error: {e}")
-```
+
 
 # =========================
 
@@ -217,7 +217,7 @@ def main_keyboard():
 def countries_keyboard():
 keyboard = []
 
-```
+
 row = []
 
 for code, data in COUNTRIES.items():
@@ -236,12 +236,12 @@ if row:
     keyboard.append(row)
 
 return InlineKeyboardMarkup(keyboard)
-```
+
 
 def cities_keyboard(code):
 keyboard = []
 
-```
+
 row = []
 
 for city in CITIES.get(code, []):
@@ -269,7 +269,7 @@ keyboard.append(
 )
 
 return InlineKeyboardMarkup(keyboard)
-```
+
 
 # =========================
 
@@ -282,19 +282,19 @@ session = None
 async def get_session():
 global session
 
-```
+
 if session is None:
     timeout = aiohttp.ClientTimeout(total=10)
 
     session = aiohttp.ClientSession(timeout=timeout)
 
 return session
-```
+
 
 async def fetch_prayer_times(city, country):
 cache_key = f"{city}_{country}"
 
-```
+
 if cache_key in CACHE:
     cached = CACHE[cache_key]
 
@@ -329,7 +329,7 @@ try:
 except Exception as e:
     logger.error(f"Prayer API error: {e}")
     return None
-```
+
 
 # =========================
 
@@ -349,7 +349,7 @@ prayers = [
 ("🌙 Xufton", clean_time(timings["Isha"])),
 ]
 
-```
+
 now = datetime.now()
 
 for name, time_str in prayers:
@@ -370,13 +370,13 @@ for name, time_str in prayers:
         return f"{name} — {hours} soat {minutes} daqiqa"
 
 return "🌙 Ertangi Bomdod kutilmoqda"
-```
+
 
 def calculate_qibla(lat, lon):
 makkah_lat = math.radians(21.3891)
 makkah_lon = math.radians(39.8579)
 
-```
+
 lat = math.radians(lat)
 lon = math.radians(lon)
 
@@ -391,7 +391,7 @@ y = (
 bearing = math.degrees(math.atan2(x, y))
 
 return round((bearing + 360) % 360, 2)
-```
+
 
 # =========================
 
@@ -402,7 +402,7 @@ return round((bearing + 360) % 360, 2)
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 user = update.effective_user
 
-```
+
 user_ids.add(user.id)
 
 save_data()
@@ -413,7 +413,7 @@ await update.message.reply_text(
     "🌍 Davlatni tanlang:",
     reply_markup=countries_keyboard(),
 )
-```
+
 
 # =========================
 
@@ -424,7 +424,7 @@ await update.message.reply_text(
 async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 query = update.callback_query
 
-```
+
 await query.answer()
 
 data = query.data
@@ -470,7 +470,7 @@ elif data.startswith("city_"):
         text="📍 Manzil saqlandi.",
         reply_markup=main_keyboard(),
     )
-```
+
 
 # =========================
 
@@ -481,7 +481,7 @@ elif data.startswith("city_"):
 async def prayer_times(update: Update, context: ContextTypes.DEFAULT_TYPE):
 user_id = str(update.effective_user.id)
 
-```
+
 if user_id not in user_data:
     await update.message.reply_text(
         "❌ Avval /start bosing."
@@ -520,7 +520,7 @@ weekday = WEEKDAYS.get(
 )
 
 text = f'''
-```
+
 
 🕌 NAMOZ VAQTLARI
 
@@ -545,9 +545,9 @@ text = f'''
 {calculate_next_prayer(timings)}
 '''
 
-```
+
 await loading.edit_text(text)
-```
+
 
 # =========================
 
@@ -558,7 +558,7 @@ await loading.edit_text(text)
 async def qibla(update: Update, context: ContextTypes.DEFAULT_TYPE):
 user_id = str(update.effective_user.id)
 
-```
+
 if user_id not in user_data:
     await update.message.reply_text(
         "❌ Avval /start bosing."
@@ -590,7 +590,7 @@ lon = float(meta["longitude"])
 angle = calculate_qibla(lat, lon)
 
 text = f'''
-```
+
 
 🧭 QIBLA TOMONI
 
@@ -607,9 +607,9 @@ text = f'''
 📍 Longitude: {lon}
 '''
 
-```
+
 await loading.edit_text(text)
-```
+
 
 # =========================
 
@@ -620,14 +620,14 @@ await loading.edit_text(text)
 async def about(update: Update, context: ContextTypes.DEFAULT_TYPE):
 user_id = str(update.effective_user.id)
 
-```
+
 city = "Tanlanmagan"
 
 if user_id in user_data:
     city = user_data[user_id]["city"]
 
 text = f'''
-```
+
 
 ℹ️ BOT HAQIDA
 
@@ -645,9 +645,9 @@ text = f'''
 • Tezkor ishlash
 '''
 
-```
+
 await update.message.reply_text(text)
-```
+
 
 # =========================
 
@@ -659,7 +659,7 @@ async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
 if update.effective_user.id != ADMIN_ID:
 return
 
-```
+
 keyboard = InlineKeyboardMarkup(
     [
         [
@@ -681,12 +681,12 @@ await update.message.reply_text(
     "⚙️ ADMIN PANEL",
     reply_markup=keyboard,
 )
-```
+
 
 async def admin_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
 query = update.callback_query
 
-```
+
 await query.answer()
 
 if query.from_user.id != ADMIN_ID:
@@ -703,7 +703,7 @@ elif query.data == "broadcast":
     await query.message.reply_text(
         "✍️ Xabar yuboring:"
     )
-```
+
 
 # =========================
 
@@ -714,7 +714,7 @@ elif query.data == "broadcast":
 async def texts(update: Update, context: ContextTypes.DEFAULT_TYPE):
 text = update.message.text
 
-```
+
 user_id = update.effective_user.id
 
 user_ids.add(user_id)
@@ -769,7 +769,7 @@ elif text == "⚙️ Shaharni o'zgartirish":
 
 elif text == "ℹ️ Bot haqida":
     await about(update, context)
-```
+
 
 # =========================
 
@@ -789,10 +789,10 @@ async def error_handler(update, context):
 async def shutdown():
 global session
 
-```
+
 if session:
     await session.close()
-```
+
 
 def main():
     load_data()
