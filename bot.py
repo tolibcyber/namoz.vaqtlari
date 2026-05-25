@@ -171,21 +171,20 @@ def save_data():
 ```
 
 def load_data():
-global user_ids, user_data
+    global user_ids, user_data
 
-```
-if not os.path.exists(DATA_FILE):
-    return
+    if not os.path.exists(DATA_FILE):
+        return
 
-try:
-    with open(DATA_FILE, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    try:
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
 
-        user_ids = set(data.get("user_ids", []))
-        user_data = data.get("user_data", {})
+            user_ids = set(data.get("user_ids", []))
+            user_data = data.get("user_data", {})
 
-except Exception as e:
-    logger.error(f"Load error: {e}")
+    except Exception as e:
+        logger.error(f"Load error: {e}")
 ```
 
 # =========================
@@ -195,22 +194,25 @@ except Exception as e:
 # =========================
 
 def main_keyboard():
-return ReplyKeyboardMarkup(
-[
-[
-KeyboardButton("🕌 Namoz vaqtlari"),
-KeyboardButton("🧭 Qibla tomoni"),
-],
-[
-KeyboardButton("📱 Mini App", web_app=WebAppInfo(url=WEBAPP_URL)),
-],
-[
-KeyboardButton("⚙️ Shaharni o'zgartirish"),
-KeyboardButton("ℹ️ Bot haqida"),
-],
-],
-resize_keyboard=True,
-)
+    return ReplyKeyboardMarkup(
+        [
+            [
+                KeyboardButton("🕌 Namoz vaqtlari"),
+                KeyboardButton("🧭 Qibla tomoni"),
+            ],
+            [
+                KeyboardButton(
+                    "📱 Mini App",
+                    web_app=WebAppInfo(url=WEBAPP_URL)
+                ),
+            ],
+            [
+                KeyboardButton("⚙️ Shaharni o'zgartirish"),
+                KeyboardButton("ℹ️ Bot haqida"),
+            ],
+        ],
+        resize_keyboard=True,
+    )
 
 def countries_keyboard():
 keyboard = []
@@ -776,7 +778,7 @@ elif text == "ℹ️ Bot haqida":
 # =========================
 
 async def error_handler(update, context):
-logger.error(f"ERROR: {context.error}")
+    logger.error(f"ERROR: {context.error}")
 
 # =========================
 
@@ -793,38 +795,37 @@ if session:
 ```
 
 def main():
-load_data()
+    load_data()
 
-```
-app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("admin", admin))
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("admin", admin))
 
-app.add_handler(
-    CallbackQueryHandler(
-        admin_callbacks,
-        pattern="^(users|broadcast)$",
+    app.add_handler(
+        CallbackQueryHandler(
+            admin_callbacks,
+            pattern="^(users|broadcast)$",
+        )
     )
-)
 
-app.add_handler(
-    CallbackQueryHandler(callbacks)
-)
-
-app.add_handler(
-    MessageHandler(
-        filters.TEXT & ~filters.COMMAND,
-        texts,
+    app.add_handler(
+        CallbackQueryHandler(callbacks)
     )
-)
 
-app.add_error_handler(error_handler)
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND,
+            texts,
+        )
+    )
 
-print("✅ Namoz Vaqtlari Bot ishga tushdi")
+    app.add_error_handler(error_handler)
 
-app.run_polling()
-```
+    print("✅ Namoz Vaqtlari Bot ishga tushdi")
+
+    app.run_polling()
+
 
 if __name__ == "__main__":
-main()
+    main()
