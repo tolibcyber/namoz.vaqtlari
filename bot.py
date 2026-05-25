@@ -215,7 +215,26 @@ def main_keyboard():
     )
 
 def countries_keyboard():
-keyboard = []
+    keyboard = []
+
+    row = []
+
+    for code, data in COUNTRIES.items():
+        row.append(
+            InlineKeyboardButton(
+                data["name"],
+                callback_data=f"country_{code}",
+            )
+        )
+
+        if len(row) == 2:
+            keyboard.append(row)
+            row = []
+
+    if row:
+        keyboard.append(row)
+
+    return InlineKeyboardMarkup(keyboard)
 
 
 row = []
