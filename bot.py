@@ -1,469 +1,831 @@
-import logging
 import os
 import math
+import json
+import asyncio
+import logging
+from datetime import datetime, timedelta
+
 import aiohttp
-from datetime import datetime
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
-from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
- 
-TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", "7288739341"))
- 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
- 
+from dotenv import load_dotenv
+
+from telegram import (
+Update,
+InlineKeyboardButton,
+InlineKeyboardMarkup,
+ReplyKeyboardMarkup,
+KeyboardButton,
+WebAppInfo,
+)
+
+from telegram.ext import (
+ApplicationBuilder,
+CommandHandler,
+CallbackQueryHandler,
+MessageHandler,
+ContextTypes,
+filters,
+)
+
+# =========================
+
+# LOAD ENV
+
+# =========================
+
+load_dotenv()
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
+WEBAPP_URL = os.getenv("WEBAPP_URL", "https://example.com")
+
+# =========================
+
+# LOGGING
+
+# =========================
+
+logging.basicConfig(
+format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+level=logging.INFO,
+)
+
+logger = logging.getLogger(**name**)
+
+# =========================
+
+# STORAGE
+
+# =========================
+
+DATA_FILE = "users.json"
+
 user_ids = set()
 user_data = {}
- 
+
+CACHE = {}
+
+# =========================
+
+# COUNTRIES
+
+# =========================
+
 COUNTRIES = {
-    "uz": {"name": "🇺🇿 O'zbekiston", "api": "Uzbekistan"},
-    "ru": {"name": "🇷🇺 Rossiya", "api": "Russia"},
-    "kz": {"name": "🇰🇿 Qozog'iston", "api": "Kazakhstan"},
-    "tr": {"name": "🇹🇷 Turkiya", "api": "Turkey"},
-    "ae": {"name": "🇦🇪 BAA", "api": "UAE"},
-    "de": {"name": "🇩🇪 Germaniya", "api": "Germany"},
-    "us": {"name": "🇺🇸 AQSH", "api": "United States"},
-    "gb": {"name": "🇬🇧 Buyuk Britaniya", "api": "United Kingdom"},
+"uz": {"name": "🇺🇿 O'zbekiston", "api": "Uzbekistan"},
+"ru": {"name": "🇷🇺 Rossiya", "api": "Russia"},
+"kz": {"name": "🇰🇿 Qozog'iston", "api": "Kazakhstan"},
+"tr": {"name": "🇹🇷 Turkiya", "api": "Turkey"},
+"ae": {"name": "🇦🇪 BAA", "api": "UAE"},
+"de": {"name": "🇩🇪 Germaniya", "api": "Germany"},
+"us": {"name": "🇺🇸 AQSH", "api": "United States"},
+"gb": {"name": "🇬🇧 Buyuk Britaniya", "api": "United Kingdom"},
 }
- 
+
 CITIES = {
-    "uz": ["Toshkent", "Samarqand", "Buxoro", "Namangan", "Andijon", "Farg'ona", "Qo'qon", "Nukus", "Termiz", "Qarshi", "Jizzax", "Navoiy"],
-    "ru": ["Moskva", "Sankt-Peterburg", "Kazan", "Ufa", "Novosibirsk", "Yekaterinburg"],
-    "kz": ["Olmaota", "Astana", "Shymkent"],
-    "tr": ["Istanbul", "Anqara", "Izmir", "Bursa"],
-    "ae": ["Dubay", "Abu-Dabi", "Sharjah"],
-    "de": ["Berlin", "Myunxen", "Frankfurt", "Gamburg"],
-    "us": ["Nyu-York", "Los-Anjeles", "Chikago", "Xouston"],
-    "gb": ["London", "Manchester", "Birmingham"],
+"uz": ["Toshkent", "Samarqand", "Buxoro", "Namangan", "Andijon", "Farg'ona", "Qo'qon", "Nukus", "Termiz", "Qarshi", "Jizzax", "Navoiy"],
+"ru": ["Moskva", "Sankt-Peterburg", "Kazan", "Ufa", "Novosibirsk", "Yekaterinburg"],
+"kz": ["Olmaota", "Astana", "Shymkent"],
+"tr": ["Istanbul", "Anqara", "Izmir", "Bursa"],
+"ae": ["Dubay", "Abu-Dabi", "Sharjah"],
+"de": ["Berlin", "Myunxen", "Frankfurt", "Gamburg"],
+"us": ["Nyu-York", "Los-Anjeles", "Chikago", "Xouston"],
+"gb": ["London", "Manchester", "Birmingham"],
 }
- 
+
 CITY_API_NAME = {
-    "Toshkent": "Tashkent", "Samarqand": "Samarkand", "Buxoro": "Bukhara",
-    "Namangan": "Namangan", "Andijon": "Andijan", "Farg'ona": "Fergana",
-    "Qo'qon": "Kokand", "Nukus": "Nukus", "Termiz": "Termez",
-    "Qarshi": "Karshi", "Jizzax": "Jizzakh", "Navoiy": "Navoi",
-    "Moskva": "Moscow", "Sankt-Peterburg": "Saint Petersburg",
-    "Kazan": "Kazan", "Ufa": "Ufa", "Novosibirsk": "Novosibirsk",
-    "Yekaterinburg": "Yekaterinburg", "Olmaota": "Almaty",
-    "Astana": "Astana", "Shymkent": "Shymkent",
-    "Istanbul": "Istanbul", "Anqara": "Ankara", "Izmir": "Izmir", "Bursa": "Bursa",
-    "Dubay": "Dubai", "Abu-Dabi": "Abu Dhabi", "Sharjah": "Sharjah",
-    "Berlin": "Berlin", "Myunxen": "Munich", "Frankfurt": "Frankfurt", "Gamburg": "Hamburg",
-    "Nyu-York": "New York", "Los-Anjeles": "Los Angeles", "Chikago": "Chicago", "Xouston": "Houston",
-    "London": "London", "Manchester": "Manchester", "Birmingham": "Birmingham",
+"Toshkent": "Tashkent",
+"Samarqand": "Samarkand",
+"Buxoro": "Bukhara",
+"Namangan": "Namangan",
+"Andijon": "Andijan",
+"Farg'ona": "Fergana",
+"Qo'qon": "Kokand",
+"Nukus": "Nukus",
+"Termiz": "Termez",
+"Qarshi": "Karshi",
+"Jizzax": "Jizzakh",
+"Navoiy": "Navoi",
+"Moskva": "Moscow",
+"Sankt-Peterburg": "Saint Petersburg",
+"Kazan": "Kazan",
+"Ufa": "Ufa",
+"Novosibirsk": "Novosibirsk",
+"Yekaterinburg": "Yekaterinburg",
+"Olmaota": "Almaty",
+"Astana": "Astana",
+"Shymkent": "Shymkent",
+"Anqara": "Ankara",
+"Dubay": "Dubai",
+"Abu-Dabi": "Abu Dhabi",
+"Myunxen": "Munich",
+"Gamburg": "Hamburg",
+"Nyu-York": "New York",
+"Los-Anjeles": "Los Angeles",
+"Chikago": "Chicago",
+"Xouston": "Houston",
 }
- 
+
 HIJRI_MONTHS = [
-    "Muharram", "Safar", "Rabi ul-avval", "Rabi ul-oxir",
-    "Jumad ul-avval", "Jumad ul-oxir", "Rajab", "Sha'bon",
-    "Ramazon", "Shavvol", "Zul-qa'da", "Zul-hijja"
+"Muharram",
+"Safar",
+"Rabi ul-avval",
+"Rabi ul-oxir",
+"Jumad ul-avval",
+"Jumad ul-oxir",
+"Rajab",
+"Sha'bon",
+"Ramazon",
+"Shavvol",
+"Zul-qa'da",
+"Zul-hijja",
 ]
- 
+
 WEEKDAYS = {
-    "Monday": "Dushanba", "Tuesday": "Seshanba", "Wednesday": "Chorshanba",
-    "Thursday": "Payshanba", "Friday": "Juma ✨", "Saturday": "Shanba", "Sunday": "Yakshanba"
+"Monday": "Dushanba",
+"Tuesday": "Seshanba",
+"Wednesday": "Chorshanba",
+"Thursday": "Payshanba",
+"Friday": "Juma ✨",
+"Saturday": "Shanba",
+"Sunday": "Yakshanba",
 }
- 
-def get_main_keyboard():
-    return ReplyKeyboardMarkup([
-        [KeyboardButton("🕌 Namoz vaqtlari"), KeyboardButton("🧭 Qibla tomoni")],
-        [KeyboardButton("⚙️ Shaharni o'zgartirish"), KeyboardButton("ℹ️ Bot haqida")],
-    ], resize_keyboard=True)
- 
-def get_country_keyboard():
-    buttons = []
-    row = []
-    for code, info in COUNTRIES.items():
-        row.append(InlineKeyboardButton(info["name"], callback_data=f"country_{code}"))
-        if len(row) == 2:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
-    return InlineKeyboardMarkup(buttons)
- 
-def get_city_keyboard(country_code):
-    cities = CITIES.get(country_code, [])
-    buttons = []
-    row = []
-    for city in cities:
-        row.append(InlineKeyboardButton(city, callback_data=f"city_{country_code}_{city}"))
-        if len(row) == 3:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
-    buttons.append([InlineKeyboardButton("⬅️ Orqaga", callback_data="back_countries")])
-    return InlineKeyboardMarkup(buttons)
- 
-async def fetch_prayer_times(city: str, country: str):
+
+# =========================
+
+# SAVE / LOAD
+
+# =========================
+
+def save_data():
+try:
+data = {
+"user_ids": list(user_ids),
+"user_data": user_data,
+}
+
+```
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+except Exception as e:
+    logger.error(f"Save error: {e}")
+```
+
+def load_data():
+global user_ids, user_data
+
+```
+if not os.path.exists(DATA_FILE):
+    return
+
+try:
+    with open(DATA_FILE, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+        user_ids = set(data.get("user_ids", []))
+        user_data = data.get("user_data", {})
+
+except Exception as e:
+    logger.error(f"Load error: {e}")
+```
+
+# =========================
+
+# KEYBOARDS
+
+# =========================
+
+def main_keyboard():
+return ReplyKeyboardMarkup(
+[
+[
+KeyboardButton("🕌 Namoz vaqtlari"),
+KeyboardButton("🧭 Qibla tomoni"),
+],
+[
+KeyboardButton("📱 Mini App", web_app=WebAppInfo(url=WEBAPP_URL)),
+],
+[
+KeyboardButton("⚙️ Shaharni o'zgartirish"),
+KeyboardButton("ℹ️ Bot haqida"),
+],
+],
+resize_keyboard=True,
+)
+
+def countries_keyboard():
+keyboard = []
+
+```
+row = []
+
+for code, data in COUNTRIES.items():
+    row.append(
+        InlineKeyboardButton(
+            data["name"],
+            callback_data=f"country_{code}",
+        )
+    )
+
+    if len(row) == 2:
+        keyboard.append(row)
+        row = []
+
+if row:
+    keyboard.append(row)
+
+return InlineKeyboardMarkup(keyboard)
+```
+
+def cities_keyboard(code):
+keyboard = []
+
+```
+row = []
+
+for city in CITIES.get(code, []):
+    row.append(
+        InlineKeyboardButton(
+            city,
+            callback_data=f"city_{code}_{city}",
+        )
+    )
+
+    if len(row) == 2:
+        keyboard.append(row)
+        row = []
+
+if row:
+    keyboard.append(row)
+
+keyboard.append(
+    [
+        InlineKeyboardButton(
+            "⬅️ Orqaga",
+            callback_data="back",
+        )
+    ]
+)
+
+return InlineKeyboardMarkup(keyboard)
+```
+
+# =========================
+
+# API
+
+# =========================
+
+session = None
+
+async def get_session():
+global session
+
+```
+if session is None:
+    timeout = aiohttp.ClientTimeout(total=10)
+
+    session = aiohttp.ClientSession(timeout=timeout)
+
+return session
+```
+
+async def fetch_prayer_times(city, country):
+cache_key = f"{city}_{country}"
+
+```
+if cache_key in CACHE:
+    cached = CACHE[cache_key]
+
+    if datetime.now() - cached["time"] < timedelta(minutes=30):
+        return cached["data"]
+
+try:
     api_city = CITY_API_NAME.get(city, city)
-    url = f"https://api.aladhan.com/v1/timingsByCity?city={api_city}&country={country}&method=3"
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return data.get("data", {})
-    except Exception as e:
-        logger.error(f"API xatosi: {e}")
-    return None
- 
-async def fetch_coordinates(city: str, country: str):
-    data = await fetch_prayer_times(city, country)
-    if data and "meta" in data:
-        meta = data["meta"]
-        return float(meta.get("latitude", 0)), float(meta.get("longitude", 0))
-    return None, None
- 
-def calculate_qibla(lat1, lon1):
-    lat2 = math.radians(21.3891)
-    lon2 = math.radians(39.8579)
-    lat1r = math.radians(lat1)
-    lon1r = math.radians(lon1)
-    dlon = lon2 - lon1r
-    x = math.sin(dlon) * math.cos(lat2)
-    y = math.cos(lat1r) * math.sin(lat2) - math.sin(lat1r) * math.cos(lat2) * math.cos(dlon)
-    bearing = math.degrees(math.atan2(x, y))
-    return round((bearing + 360) % 360, 1)
- 
-def get_compass_direction(angle):
-    dirs = [
-        (22.5, "Shimol"), (67.5, "Shimoli-sharq"), (112.5, "Sharq"),
-        (157.5, "Janubi-sharq"), (202.5, "Janub"), (247.5, "Janubi-g'arb"),
-        (292.5, "G'arb"), (337.5, "Shimoli-g'arb"),
-    ]
-    for limit, name in dirs:
-        if angle < limit:
-            return name
-    return "Shimol"
- 
-def get_compass_visual(angle):
-    # 16 ta yo'nalish asosida kompas chizish
-    a = angle
-    # Shimol
-    if a < 22.5 or a >= 337.5:
-        arrow = "⬆️"
-        pos = "to'g'ri oldinga (Shimol)"
-    elif a < 67.5:
-        arrow = "↗️"
-        pos = "o'ng-old (Shimoli-sharq)"
-    elif a < 112.5:
-        arrow = "➡️"
-        pos = "to'g'ri o'ng (Sharq)"
-    elif a < 157.5:
-        arrow = "↘️"
-        pos = "o'ng-orqa (Janubi-sharq)"
-    elif a < 202.5:
-        arrow = "⬇️"
-        pos = "to'g'ri orqa (Janub)"
-    elif a < 247.5:
-        arrow = "↙️"
-        pos = "chap-orqa (Janubi-g'arb)"
-    elif a < 292.5:
-        arrow = "⬅️"
-        pos = "to'g'ri chap (G'arb)"
-    else:
-        arrow = "↖️"
-        pos = "chap-old (Shimoli-g'arb)"
- 
-    compass = (
-        f"        🔝 Shimol\n"
-        f"         |\n"
-        f"G'arb ◀️ ✙ ▶️ Sharq\n"
-        f"         |\n"
-        f"        Janub\n\n"
-        f"  Ka'ba tomoni: {arrow}\n"
-        f"  ({pos})"
+
+    url = (
+        "https://api.aladhan.com/v1/timingsByCity"
+        f"?city={api_city}&country={country}&method=3"
     )
-    return compass, arrow
- 
-def get_next_prayer(timings):
-    now = datetime.now()
-    current_time = now.strftime("%H:%M")
-    prayers = [
-        ("Fajr", "🌅 Bomdod"),
-        ("Dhuhr", "☀️ Peshin"),
-        ("Asr", "🌇 Asr"),
-        ("Maghrib", "🌆 Shom"),
-        ("Isha", "🌙 Xufton"),
-    ]
-    for key, name in prayers:
-        t = timings.get(key, "")[:5]
-        if t > current_time:
-            h, m = map(int, t.split(":"))
-            ch, cm = map(int, current_time.split(":"))
-            diff = (h * 60 + m) - (ch * 60 + cm)
-            hours = diff // 60
-            mins = diff % 60
-            if hours > 0:
-                return f"{name} — {hours} soat {mins} daqiqadan keyin ({t})"
-            else:
-                return f"{name} — {mins} daqiqadan keyin ({t})"
-    return "🌙 Barcha namozlar o'qildi. Ertangi Bomdod kutilmoqda."
- 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    user_ids.add(user.id)
-    await update.message.reply_text(
-        f"☪️ *Assalomu alaykum, {user.first_name}!*\n\n"
-        "━━━━━━━━━━━━━━━━━━━━━\n"
-        "🕌 *Namoz Vaqtlari Bot* ga xush kelibsiz!\n"
-        "━━━━━━━━━━━━━━━━━━━━━\n\n"
-        "📍 Avval *mamlakatingizni* tanlang 👇",
-        parse_mode="Markdown",
-        reply_markup=get_country_keyboard()
-    )
- 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    user = query.from_user
-    user_ids.add(user.id)
-    data = query.data
- 
-    if data == "back_countries":
-        await query.message.edit_text(
-            "🌍 *Mamlakatni tanlang:*",
-            parse_mode="Markdown",
-            reply_markup=get_country_keyboard()
-        )
- 
-    elif data.startswith("country_"):
-        country_code = data.replace("country_", "")
-        country_name = COUNTRIES[country_code]["name"]
-        await query.message.edit_text(
-            f"✅ *{country_name}* tanlandi!\n\n"
-            f"🏙 Endi *shahringizni* tanlang 👇",
-            parse_mode="Markdown",
-            reply_markup=get_city_keyboard(country_code)
-        )
- 
-    elif data.startswith("city_"):
-        parts = data.split("_", 2)
-        country_code = parts[1]
-        city = parts[2]
-        country_info = COUNTRIES[country_code]
-        user_data[user.id] = {
-            "city": city,
-            "country": country_info["api"],
-            "country_code": country_code,
-            "city_name": city,
-            "country_name": country_info["name"],
+
+    session = await get_session()
+
+    async with session.get(url) as resp:
+        if resp.status != 200:
+            return None
+
+        result = await resp.json()
+
+        data = result.get("data")
+
+        CACHE[cache_key] = {
+            "time": datetime.now(),
+            "data": data,
         }
-        await query.message.edit_text(
-            f"✅ *Manzil saqlandi!*\n\n"
-            f"🌍 Mamlakat: *{country_info['name']}*\n"
-            f"🏙 Shahar: *{city}*",
-            parse_mode="Markdown"
-        )
-        await context.bot.send_message(
-            chat_id=user.id,
-            text=(
-                "━━━━━━━━━━━━━━━━━━━━━\n"
-                "🕌 *Namoz Vaqtlari Bot*\n"
-                "━━━━━━━━━━━━━━━━━━━━━\n\n"
-                f"📍 Shahar: *{city}*\n\n"
-                "Quyidagi tugmalardan foydalaning 👇"
-            ),
-            parse_mode="Markdown",
-            reply_markup=get_main_keyboard()
-        )
- 
-    elif data == "user_count":
-        if user.id != ADMIN_ID:
-            return
-        await query.message.reply_text(
-            f"👥 *Jami foydalanuvchilar:* `{len(user_ids)}` ta",
-            parse_mode="Markdown"
-        )
- 
-    elif data == "broadcast":
-        if user.id != ADMIN_ID:
-            return
-        context.user_data["waiting_broadcast"] = True
-        await query.message.reply_text(
-            "✍️ Hammaga yubormoqchi bo'lgan *xabaringizni* yozing:\n\n"
-            "_(Bekor qilish: /cancel)_",
-            parse_mode="Markdown"
-        )
- 
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    text = update.message.text
-    user_ids.add(user.id)
- 
-    # Admin broadcast
-    if user.id == ADMIN_ID and context.user_data.get("waiting_broadcast"):
-        context.user_data["waiting_broadcast"] = False
-        await update.message.reply_text(f"⏳ Yuborilmoqda... ({len(user_ids)} ta foydalanuvchi)")
-        success, failed = 0, 0
-        for uid in list(user_ids):
-            try:
-                await context.bot.send_message(chat_id=uid, text=text)
-                success += 1
-            except Exception:
-                failed += 1
-        await update.message.reply_text(
-            f"✅ *Yuborish yakunlandi!*\n\n"
-            f"✔️ Muvaffaqiyatli: *{success}* ta\n"
-            f"❌ Xatolik: *{failed}* ta",
-            parse_mode="Markdown"
-        )
-        return
- 
-    if user.id not in user_data and text != "⚙️ Shaharni o'zgartirish":
-        await update.message.reply_text(
-            "⚠️ Iltimos, avval shaharni tanlang 👇",
-            reply_markup=get_country_keyboard()
-        )
-        return
- 
-    udata = user_data.get(user.id, {})
- 
-    # ---- NAMOZ VAQTLARI ----
-    if text == "🕌 Namoz vaqtlari":
-        msg = await update.message.reply_text("⏳ Namoz vaqtlari yuklanmoqda...")
-        data = await fetch_prayer_times(udata["city"], udata["country"])
- 
-        if not data:
-            await msg.edit_text("❌ Ma'lumot olishda xatolik. Qayta urinib ko'ring.")
-            return
- 
-        timings = data.get("timings", {})
-        date_info = data.get("date", {})
-        gregorian = date_info.get("gregorian", {})
-        hijri = date_info.get("hijri", {})
- 
-        hijri_day = hijri.get("day", "")
-        hijri_month_num = int(hijri.get("month", {}).get("number", 1)) - 1
-        hijri_month = HIJRI_MONTHS[hijri_month_num] if 0 <= hijri_month_num < 12 else ""
-        hijri_year = hijri.get("year", "")
-        greg_date = gregorian.get("date", "")
-        weekday_uz = WEEKDAYS.get(gregorian.get("weekday", {}).get("en", ""), "")
- 
-        next_prayer = get_next_prayer(timings)
- 
-        fajr = timings.get('Fajr', '')[:5]
-        sunrise = timings.get('Sunrise', '')[:5]
-        dhuhr = timings.get('Dhuhr', '')[:5]
-        asr = timings.get('Asr', '')[:5]
-        maghrib = timings.get('Maghrib', '')[:5]
-        isha = timings.get('Isha', '')[:5]
- 
-        result = (
-            f"🕌 *NAMOZ VAQTLARI*\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"📍 *{udata['city_name']}* | {udata.get('country_name', '')}\n"
-            f"📅 {weekday_uz}, {greg_date}\n"
-            f"🌙 {hijri_day} {hijri_month} {hijri_year} h.\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"🌅  *Bomdod*  ›  `{fajr}`\n"
-            f"🌄  *Quyosh*  ›  `{sunrise}`\n"
-            f"☀️   *Peshin*   ›  `{dhuhr}`\n"
-            f"🌇  *Asr*        ›  `{asr}`\n"
-            f"🌆  *Shom*    ›  `{maghrib}`\n"
-            f"🌙  *Xufton*  ›  `{isha}`\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"⏰ *Keyingi namoz:*\n"
-            f"▸ {next_prayer}\n"
-            f"━━━━━━━━━━━━━━━━━━━━━"
-        )
-        await msg.edit_text(result, parse_mode="Markdown")
- 
-    # ---- QIBLA TOMONI ----
-    elif text == "🧭 Qibla tomoni":
-        msg = await update.message.reply_text("⏳ Qibla tomoni hisoblanmoqda...")
-        lat, lon = await fetch_coordinates(udata["city"], udata["country"])
- 
-        if lat is None:
-            await msg.edit_text("❌ Koordinatalarni olishda xatolik. Qayta urinib ko'ring.")
-            return
- 
-        angle = calculate_qibla(lat, lon)
-        direction = get_compass_direction(angle)
-        compass_text, arrow = get_compass_visual(angle)
- 
-        result = (
-            f"🧭 *QIBLA TOMONI*\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"📍 *{udata['city_name']}*\n"
-            f"🌐 Koordinat: `{round(lat,4)}°N`, `{round(lon,4)}°E`\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"📐 *Qibla burchagi:* `{angle}°`\n"
-            f"🧭 *Yo'nalish:* {direction}\n"
-            f"🕋 *Ka'ba tomoni:* {arrow}\n\n"
-            f"```\n{compass_text}\n```\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"💡 *Qanday foydalanish:*\n"
-            f"Telefoningizni qibla ilovasi bilan\n"
-            f"tekshiring yoki kompas {arrow} ko'rsatgan\n"
-            f"tomonga yuzlaning — bu Ka'ba tomoni!\n"
-            f"━━━━━━━━━━━━━━━━━━━━━"
-        )
-        await msg.edit_text(result, parse_mode="Markdown")
- 
-    # ---- SHAHARNI O'ZGARTIRISH ----
-    elif text == "⚙️ Shaharni o'zgartirish":
-        await update.message.reply_text(
-            "🌍 *Yangi mamlakatni tanlang:*",
-            parse_mode="Markdown",
-            reply_markup=get_country_keyboard()
-        )
- 
-    # ---- BOT HAQIDA ----
-    elif text == "ℹ️ Bot haqida":
-        city = udata.get("city_name", "Tanlanmagan")
-        country = udata.get("country_name", "")
-        result = (
-            f"☪️ *NAMOZ VAQTLARI BOT*\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"📍 Hozirgi manzil:\n"
-            f"   🌍 {country}\n"
-            f"   🏙 {city}\n\n"
-            f"🔧 *Imkoniyatlar:*\n"
-            f"▸ 🕌 Kunlik namoz vaqtlari\n"
-            f"▸ 🧭 Qibla yo'nalishi\n"
-            f"▸ 🌙 Hijriy sana\n"
-            f"▸ ⏰ Keyingi namozgacha vaqt\n"
-            f"▸ 🌍 40+ shahar qo'llab-quvvatlanadi\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━\n"
-            f"📡 Ma'lumot: *Aladhan API*\n"
-            f"👨‍💻 Dasturchi: @TolibDev\n"
-            f"━━━━━━━━━━━━━━━━━━━━━"
-        )
-        await update.message.reply_text(result, parse_mode="Markdown")
- 
-async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("❌ Sizda ruxsat yo'q!")
-        return
-    keyboard = [
-        [InlineKeyboardButton("👥 Foydalanuvchilar soni", callback_data="user_count")],
-        [InlineKeyboardButton("📨 Hammaga xabar yuborish", callback_data="broadcast")],
-    ]
-    await update.message.reply_text(
-        f"⚙️ *ADMIN PANEL*\n"
-        f"━━━━━━━━━━━━━━━━━━━━━\n"
-        f"👥 Foydalanuvchilar: *{len(user_ids)}* ta\n"
-        f"━━━━━━━━━━━━━━━━━━━━━",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(keyboard)
+
+        return data
+
+except Exception as e:
+    logger.error(f"Prayer API error: {e}")
+    return None
+```
+
+# =========================
+
+# UTILITIES
+
+# =========================
+
+def clean_time(value):
+return value.split(" ")[0][:5]
+
+def calculate_next_prayer(timings):
+prayers = [
+("🌅 Bomdod", clean_time(timings["Fajr"])),
+("☀️ Peshin", clean_time(timings["Dhuhr"])),
+("🌇 Asr", clean_time(timings["Asr"])),
+("🌆 Shom", clean_time(timings["Maghrib"])),
+("🌙 Xufton", clean_time(timings["Isha"])),
+]
+
+```
+now = datetime.now()
+
+for name, time_str in prayers:
+    prayer_time = datetime.strptime(time_str, "%H:%M")
+
+    prayer_time = prayer_time.replace(
+        year=now.year,
+        month=now.month,
+        day=now.day,
     )
- 
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data["waiting_broadcast"] = False
-    await update.message.reply_text("❌ Bekor qilindi.")
- 
+
+    if prayer_time > now:
+        diff = prayer_time - now
+
+        hours = diff.seconds // 3600
+        minutes = (diff.seconds % 3600) // 60
+
+        return f"{name} — {hours} soat {minutes} daqiqa"
+
+return "🌙 Ertangi Bomdod kutilmoqda"
+```
+
+def calculate_qibla(lat, lon):
+makkah_lat = math.radians(21.3891)
+makkah_lon = math.radians(39.8579)
+
+```
+lat = math.radians(lat)
+lon = math.radians(lon)
+
+dlon = makkah_lon - lon
+
+x = math.sin(dlon)
+y = (
+    math.cos(lat) * math.tan(makkah_lat)
+    - math.sin(lat) * math.cos(dlon)
+)
+
+bearing = math.degrees(math.atan2(x, y))
+
+return round((bearing + 360) % 360, 2)
+```
+
+# =========================
+
+# START
+
+# =========================
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+user = update.effective_user
+
+```
+user_ids.add(user.id)
+
+save_data()
+
+await update.message.reply_text(
+    "🕌 Assalomu alaykum!\n\n"
+    "Namoz Vaqtlari Botga xush kelibsiz.\n\n"
+    "🌍 Davlatni tanlang:",
+    reply_markup=countries_keyboard(),
+)
+```
+
+# =========================
+
+# CALLBACKS
+
+# =========================
+
+async def callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
+query = update.callback_query
+
+```
+await query.answer()
+
+data = query.data
+
+user_id = query.from_user.id
+
+if data == "back":
+    await query.message.edit_text(
+        "🌍 Davlatni tanlang:",
+        reply_markup=countries_keyboard(),
+    )
+
+elif data.startswith("country_"):
+    code = data.replace("country_", "")
+
+    await query.message.edit_text(
+        "🏙 Shaharni tanlang:",
+        reply_markup=cities_keyboard(code),
+    )
+
+elif data.startswith("city_"):
+    parts = data.split("_", 2)
+
+    code = parts[1]
+    city = parts[2]
+
+    country = COUNTRIES[code]
+
+    user_data[str(user_id)] = {
+        "city": city,
+        "country": country["api"],
+        "country_name": country["name"],
+    }
+
+    save_data()
+
+    await query.message.edit_text(
+        f"✅ Sizning shahringiz: {city}"
+    )
+
+    await context.bot.send_message(
+        chat_id=user_id,
+        text="📍 Manzil saqlandi.",
+        reply_markup=main_keyboard(),
+    )
+```
+
+# =========================
+
+# NAMOZ
+
+# =========================
+
+async def prayer_times(update: Update, context: ContextTypes.DEFAULT_TYPE):
+user_id = str(update.effective_user.id)
+
+```
+if user_id not in user_data:
+    await update.message.reply_text(
+        "❌ Avval /start bosing."
+    )
+    return
+
+info = user_data[user_id]
+
+loading = await update.message.reply_text(
+    "⏳ Yuklanmoqda..."
+)
+
+data = await fetch_prayer_times(
+    info["city"],
+    info["country"],
+)
+
+if not data:
+    await loading.edit_text(
+        "❌ API bilan bog'lanishda xatolik."
+    )
+    return
+
+timings = data["timings"]
+
+gregorian = data["date"]["gregorian"]
+hijri = data["date"]["hijri"]
+
+hijri_month = HIJRI_MONTHS[
+    int(hijri["month"]["number"]) - 1
+]
+
+weekday = WEEKDAYS.get(
+    gregorian["weekday"]["en"],
+    ""
+)
+
+text = f'''
+```
+
+🕌 NAMOZ VAQTLARI
+
+📍 {info["city"]}
+
+📅 {weekday}
+📆 {gregorian["date"]}
+🌙 {hijri["day"]} {hijri_month} {hijri["year"]}
+
+━━━━━━━━━━━━━━
+
+🌅 Bomdod: {clean_time(timings["Fajr"])}
+🌄 Quyosh: {clean_time(timings["Sunrise"])}
+☀️ Peshin: {clean_time(timings["Dhuhr"])}
+🌇 Asr: {clean_time(timings["Asr"])}
+🌆 Shom: {clean_time(timings["Maghrib"])}
+🌙 Xufton: {clean_time(timings["Isha"])}
+
+━━━━━━━━━━━━━━
+
+⏳ Keyingi namoz:
+{calculate_next_prayer(timings)}
+'''
+
+```
+await loading.edit_text(text)
+```
+
+# =========================
+
+# QIBLA
+
+# =========================
+
+async def qibla(update: Update, context: ContextTypes.DEFAULT_TYPE):
+user_id = str(update.effective_user.id)
+
+```
+if user_id not in user_data:
+    await update.message.reply_text(
+        "❌ Avval /start bosing."
+    )
+    return
+
+info = user_data[user_id]
+
+loading = await update.message.reply_text(
+    "🧭 Qibla hisoblanmoqda..."
+)
+
+data = await fetch_prayer_times(
+    info["city"],
+    info["country"],
+)
+
+if not data:
+    await loading.edit_text(
+        "❌ Xatolik yuz berdi."
+    )
+    return
+
+meta = data["meta"]
+
+lat = float(meta["latitude"])
+lon = float(meta["longitude"])
+
+angle = calculate_qibla(lat, lon)
+
+text = f'''
+```
+
+🧭 QIBLA TOMONI
+
+📍 {info["city"]}
+
+📐 Burchak: {angle}°
+
+🕋 Ka'ba tomoni:
+↖️ Shimoli-g'arb
+
+━━━━━━━━━━━━━━
+
+📍 Latitude: {lat}
+📍 Longitude: {lon}
+'''
+
+```
+await loading.edit_text(text)
+```
+
+# =========================
+
+# ABOUT
+
+# =========================
+
+async def about(update: Update, context: ContextTypes.DEFAULT_TYPE):
+user_id = str(update.effective_user.id)
+
+```
+city = "Tanlanmagan"
+
+if user_id in user_data:
+    city = user_data[user_id]["city"]
+
+text = f'''
+```
+
+ℹ️ BOT HAQIDA
+
+🕌 Namoz Vaqtlari Bot
+
+📍 Sizning shahringiz:
+{city}
+
+⚡ Imkoniyatlar:
+
+• Namoz vaqtlari
+• Qibla tomoni
+• Hijriy sana
+• Mini App
+• Tezkor ishlash
+'''
+
+```
+await update.message.reply_text(text)
+```
+
+# =========================
+
+# ADMIN
+
+# =========================
+
+async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
+if update.effective_user.id != ADMIN_ID:
+return
+
+```
+keyboard = InlineKeyboardMarkup(
+    [
+        [
+            InlineKeyboardButton(
+                "👥 Foydalanuvchilar",
+                callback_data="users",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "📨 Broadcast",
+                callback_data="broadcast",
+            )
+        ],
+    ]
+)
+
+await update.message.reply_text(
+    "⚙️ ADMIN PANEL",
+    reply_markup=keyboard,
+)
+```
+
+async def admin_callbacks(update: Update, context: ContextTypes.DEFAULT_TYPE):
+query = update.callback_query
+
+```
+await query.answer()
+
+if query.from_user.id != ADMIN_ID:
+    return
+
+if query.data == "users":
+    await query.message.reply_text(
+        f"👥 Jami: {len(user_ids)}"
+    )
+
+elif query.data == "broadcast":
+    context.user_data["broadcast"] = True
+
+    await query.message.reply_text(
+        "✍️ Xabar yuboring:"
+    )
+```
+
+# =========================
+
+# TEXTS
+
+# =========================
+
+async def texts(update: Update, context: ContextTypes.DEFAULT_TYPE):
+text = update.message.text
+
+```
+user_id = update.effective_user.id
+
+user_ids.add(user_id)
+
+save_data()
+
+if context.user_data.get("broadcast"):
+    if user_id != ADMIN_ID:
+        return
+
+    context.user_data["broadcast"] = False
+
+    success = 0
+    failed = 0
+
+    msg = await update.message.reply_text(
+        "⏳ Yuborilmoqda..."
+    )
+
+    for uid in user_ids:
+        try:
+            await context.bot.send_message(
+                chat_id=uid,
+                text=text,
+            )
+
+            success += 1
+
+            await asyncio.sleep(0.05)
+
+        except:
+            failed += 1
+
+    await msg.edit_text(
+        f"✅ Yuborildi: {success}\n"
+        f"❌ Xato: {failed}"
+    )
+
+    return
+
+if text == "🕌 Namoz vaqtlari":
+    await prayer_times(update, context)
+
+elif text == "🧭 Qibla tomoni":
+    await qibla(update, context)
+
+elif text == "⚙️ Shaharni o'zgartirish":
+    await update.message.reply_text(
+        "🌍 Davlatni tanlang:",
+        reply_markup=countries_keyboard(),
+    )
+
+elif text == "ℹ️ Bot haqida":
+    await about(update, context)
+```
+
+# =========================
+
+# ERROR
+
+# =========================
+
+async def error_handler(update, context):
+logger.error(f"ERROR: {context.error}")
+
+# =========================
+
+# MAIN
+
+# =========================
+
+async def shutdown():
+global session
+
+```
+if session:
+    await session.close()
+```
+
 def main():
-    app = ApplicationBuilder().token(TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("admin", admin))
-    app.add_handler(CommandHandler("cancel", cancel))
-    app.add_handler(CallbackQueryHandler(button_handler))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
-    print("Namoz Vaqtlari Bot v2 ishga tushdi ✅")
-    app.run_polling()
- 
-if __name__ == "__main__":
-    main()
+load_data()
+
+```
+app = ApplicationBuilder().token(BOT_TOKEN).build()
+
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("admin", admin))
+
+app.add_handler(
+    CallbackQueryHandler(
+        admin_callbacks,
+        pattern="^(users|broadcast)$",
+    )
+)
+
+app.add_handler(
+    CallbackQueryHandler(callbacks)
+)
+
+app.add_handler(
+    MessageHandler(
+        filters.TEXT & ~filters.COMMAND,
+        texts,
+    )
+)
+
+app.add_error_handler(error_handler)
+
+print("✅ Namoz Vaqtlari Bot ishga tushdi")
+
+app.run_polling()
+```
+
+if **name** == "**main**":
+main()
