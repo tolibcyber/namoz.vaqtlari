@@ -157,18 +157,17 @@ WEEKDAYS = {
 # =========================
 
 def save_data():
-try:
-data = {
-"user_ids": list(user_ids),
-"user_data": user_data,
-}
+    try:
+        data = {
+            "user_ids": list(user_ids),
+            "user_data": user_data,
+        }
 
-```
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+        with open(DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=4)
 
-except Exception as e:
-    logger.error(f"Save error: {e}")
+    except Exception as e:
+        logger.error(f"Save error: {e}")
 ```
 
 def load_data():
