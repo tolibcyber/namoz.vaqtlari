@@ -49,7 +49,7 @@ format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 level=logging.INFO,
 )
 
-logger = logging.getLogger(**name**)
+logger = logging.getLogger(__name__)
 
 # =========================
 
@@ -827,5 +827,5 @@ print("✅ Namoz Vaqtlari Bot ishga tushdi")
 app.run_polling()
 ```
 
-if **name** == "**main**":
+if __name__ == "__main__":
 main()
